@@ -197,11 +197,48 @@ const ListHandler = {
 }
 
 function mapProxy(context, objectId, path, readonly) {
+  assert(false, "should not use open source proxy")
   return new Proxy({context, objectId, path, readonly}, MapHandler)
 }
 
 function listProxy(context, objectId, path) {
+  assert(false, "should not use open source proxy")
   return new Proxy([context, objectId, path], ListHandler)
+}
+
+class DumbMapProxy {
+  constructor(data) {
+    this.target = data
+    for (const item in MapHandler) {
+      this[item] = (...args) => {
+        return MapHandler[item](this.target, ...args);
+      }
+    }
+  }
+}
+
+class DumbListProxy {
+  constructor(data) {
+    this.target = data
+    const [context, listId, path] = this.target
+    const methods = listMethods(context, listId, path)
+    for(const item in methods){
+        this[item] = methods[item]
+    }
+    for (const item in ListHandler) {
+      this[item] = (...args) => {
+        return ListHandler[item](this.target, ...args);
+      }
+    }
+  }
+}
+
+function dumbMapProxy(context, objectId, path, readonly) {
+  return new DumbMapProxy({ context, objectId, path, readonly })
+}
+
+function dumbListProxy(context, objectId, path) {
+  return new DumbListProxy([context, objectId, path])
 }
 
 /**
@@ -211,6 +248,7 @@ function listProxy(context, objectId, path) {
  * `readonly` is a list of map property names that cannot be modified.
  */
 function instantiateProxy(path, objectId, readonly) {
+  assert(false, "should not use open source proxy")
   const object = this.getObject(objectId)
   if (Array.isArray(object)) {
     return listProxy(this, objectId, path)
@@ -221,9 +259,26 @@ function instantiateProxy(path, objectId, readonly) {
   }
 }
 
+function instantiateDumbProxy(path, objectId, readonly) {
+  const object = this.getObject(objectId)
+  if (Array.isArray(object)) {
+    return dumbListProxy(this, objectId, path)
+  } else if (object instanceof Text || object instanceof Table) {
+    return object.getWriteable(this, path)
+  } else {
+    return dumbMapProxy(this, objectId, path, readonly)
+  }
+}
+
 function rootObjectProxy(context) {
+  assert(false, "should not use open source proxy")
   context.instantiateObject = instantiateProxy
   return mapProxy(context, '_root', [])
 }
 
-module.exports = { rootObjectProxy }
+function dumbRootObjectProxy(context) {
+  context.instantiateObject = instantiateDumbProxy
+  return dumbMapProxy(context, '_root', [])
+}
+
+module.exports = { rootObjectProxy: dumbRootObjectProxy }
