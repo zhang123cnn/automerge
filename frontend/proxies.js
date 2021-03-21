@@ -38,7 +38,7 @@ function listMethods(context, listId) {
             return index
           }
         }
-        return -1  
+        return -1
       } else {
         return context.getObject(listId).indexOf(o, start)
       }
@@ -99,8 +99,8 @@ function listMethods(context, listId) {
 
   // Read-only methods that can delegate to the JavaScript built-in implementations
   for (let method of ['concat', 'every', 'filter', 'find', 'findIndex', 'forEach', 'includes',
-                      'join', 'lastIndexOf', 'map', 'reduce', 'reduceRight',
-                      'slice', 'some', 'toLocaleString', 'toString']) {
+    'join', 'lastIndexOf', 'map', 'reduce', 'reduceRight',
+    'slice', 'some', 'toLocaleString', 'toString']) {
     methods[method] = (...args) => {
       const list = context.getObject(listId)
         .map((item, index) => context.getObjectField(listId, index))
@@ -218,11 +218,48 @@ const ListHandler = {
   }
 }
 
+class DumbMapProxy {
+  constructor(data) {
+    this.target = data
+    for (const item in MapHandler) {
+      this[item] = (...args) => {
+        return MapHandler[item](this.target, ...args);
+      }
+    }
+  }
+}
+
+class DumbListProxy {
+  constructor(data) {
+    this.target = data
+    const [context, listId] = this.target
+    const methods = listMethods(context, listId)
+    for(const item in methods){
+        this[item] = methods[item]
+    }
+    for (const item in ListHandler) {
+      this[item] = (...args) => {
+        return ListHandler[item](this.target, ...args);
+      }
+    }
+  }
+}
+
+function dumbMapProxy(context, objectId, readonly) {
+  return new DumbMapProxy({ context, objectId, readonly })
+}
+
+function dumbListProxy(context, objectId) {
+  return new DumbListProxy([context, objectId])
+}
+
 function mapProxy(context, objectId, readonly) {
+  assert(false, "should not use open source proxy")
   return new Proxy({context, objectId, readonly}, MapHandler)
 }
 
 function listProxy(context, objectId) {
+  assert(false, "should not use open source proxy")
   return new Proxy([context, objectId], ListHandler)
 }
 
@@ -233,6 +270,7 @@ function listProxy(context, objectId) {
  * `readonly` is a list of map property names that cannot be modified.
  */
 function instantiateProxy(objectId, readonly) {
+  assert(false, "should not use open source proxy")
   const object = this.getObject(objectId)
   if (Array.isArray(object)) {
     return listProxy(this, objectId)
@@ -243,9 +281,26 @@ function instantiateProxy(objectId, readonly) {
   }
 }
 
+function instantiateDumbProxy(objectId, readonly) {
+  const object = this.getObject(objectId)
+  if (Array.isArray(object)) {
+    return dumbListProxy(this, objectId)
+  } else if (object instanceof Text || object instanceof Table) {
+    return object.getWriteable(this)
+  } else {
+    return dumbMapProxy(this, objectId, readonly)
+  }
+}
+
 function rootObjectProxy(context) {
+  assert(false, "should not use open source proxy")
   context.instantiateObject = instantiateProxy
   return mapProxy(context, ROOT_ID)
 }
 
-module.exports = { rootObjectProxy }
+function dumbRootObjectProxy(context) {
+  context.instantiateObject = instantiateDumbProxy
+  return dumbMapProxy(context, ROOT_ID)
+}
+
+module.exports = { rootObjectProxy: dumbRootObjectProxy }
